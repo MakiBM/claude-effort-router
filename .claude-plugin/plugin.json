@@ -1,1 +1,10 @@
-{"name": "auto-effort", "version": "0.1.0", "description": "Per-step effort for Opus agents, chosen by Haiku 5.5"}
+{
+  "name": "effort-router",
+  "version": "0.1.0",
+  "description": "Sets the reasoning effort of every Opus step in Claude Code: high on the first step, then Haiku 5.5 picks low to xhigh per step.",
+  "author": { "name": "Bart Makoś" },
+  "homepage": "https://github.com/MakiBM/claude-effort-router",
+  "repository": "https://github.com/MakiBM/claude-effort-router",
+  "license": "MIT",
+  "keywords": ["effort", "reasoning", "opus", "haiku", "mod"]
+}

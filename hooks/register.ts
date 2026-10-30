@@ -54,7 +54,7 @@ const manualKey = async ($: EngineInterface) => `manual:${await $.session.id()}`
 const manualEffortOf = async ($: EngineInterface) => (await $.store.get(await manualKey($))) as string | undefined
 
 const appendLog = async ($: EngineInterface, entry: Record<string, unknown>) => {
-  const path = `${$.plugin.root}/logs/${await $.session.id()}.jsonl`
+  const path = `${await $.env.get('HOME')}/.claude/effort-router/logs/${await $.session.id()}.jsonl`
   logQueue = logQueue
     .then(async () => {
       const previous = await $.fs.read(path).catch(() => '')
