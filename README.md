@@ -16,7 +16,7 @@ A Claude Code turn is a loop of steps. Each step is one request to the model, wh
 
 - Only steps on an Opus model are routed. A session or subagent you put on Haiku or Sonnet is left alone.
 - Every agent decides for itself: each session and each subagent has its own context.
-- Your choice wins. `/effort <level>` stops the router for the session until `/effort auto`. A prompt that contains `ultrathink` stops it for that turn.
+- Your choice wins. `/effort <level>` pauses the router in that session until `/effort auto`. A prompt that contains `ultrathink` pauses it for that turn.
 
 Opus 5.5 also adapts its thinking inside each step; the router sets the ceiling the step works under.
 
@@ -50,17 +50,24 @@ In the desktop app: click + next to the prompt box, then Plugins, Add marketplac
 
 The router loads when a session starts. Restart running sessions to pick it up.
 
-## Stats
-
-Every routed step is logged to `~/.claude/effort-router/logs/<session-id>.jsonl`: time, project, agent, model, step, effort, reason, classifier time, what the classifier saw and answered, and cache tokens. The logs stay on your machine.
+## Commands
 
 ```
-/effort-router:effort-stats          all steps
-/effort-router:effort-stats today    today only
-/effort-router:effort-stats 7d       last 7 days
+/effort-router                  state and usage
+/effort-router stats            all steps
+/effort-router stats:session    this session
+/effort-router stats:today      today, from midnight
+/effort-router stats:week       this calendar week, from Monday
+/effort-router stats:month      this calendar month
+/effort-router stats:projects   steps per repository
+/effort-router disable          turn the router off in every session
+/effort-router enable           turn it back on in every session
+/effort <level>                 pause the router in this session only, until /effort auto
 ```
 
-It prints three markdown tables: a summary, the share of each effort level, and steps per project.
+Stats print as markdown tables: a summary and the share of each effort level, or for `stats:projects` the steps per repository. Worktrees (git worktrees, Multica and Orca workspaces) count under their main repository.
+
+Every routed step is logged to `~/.claude/effort-router/logs/<session-id>.jsonl`: time, project, repository, agent, model, step, effort, reason, classifier time, what the classifier saw and answered, and cache tokens. The logs stay on your machine and survive plugin updates. Stats need `python3`.
 
 ## Cost
 

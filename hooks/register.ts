@@ -11,6 +11,9 @@ const ROUTED_MODEL = /opus/i
 const CLASSIFIER = 'claude-haiku-5-5'
 const CLASSIFIER_TIMEOUT_MS = 8000
 const CONTEXT_CHARS = 1500
+const COMMAND = 'effort-router'
+const STATS_PERIODS = ['session', 'today', 'week', 'month', 'projects']
+const DISABLED_KEY = 'disabled'
 
 const SYSTEM = [
   'You set the reasoning effort for the NEXT step of a coding agent.',
@@ -22,9 +25,17 @@ const SYSTEM = [
   'Reply with exactly one word: low, medium, high or xhigh.',
 ].join('\n')
 
+const USAGE = [
+  `Usage: /${COMMAND} [stats | ${STATS_PERIODS.map(period => `stats:${period}`).join(' | ')} | disable | enable]`,
+  '- stats: all steps; session: this session; today, week, month: calendar periods; projects: steps per repository',
+  '- disable / enable: turn the router off or on in every session',
+  '- /effort <level> pauses the router in this session only, until /effort auto',
+].join('\n')
+
 const loops = new Map<string, LoopContext>()
 let isUltrathinkTurn = false
-let logQueue: Promise<void> = Promise.resolve()
+let repo: string | undefined
+let logQueue: Promise<unknown> = Promise.resolve()
 
 const clip = (text: string) => (text.length > CONTEXT_CHARS ? `${text.slice(0, CONTEXT_CHARS)}…` : text)
 
@@ -50,16 +61,27 @@ const loopOf = (agentId?: string) => {
   return created
 }
 
+const logDirOf = async ($: EngineInterface) => `${await $.env.get('HOME')}/.claude/effort-router/logs`
 const manualKey = async ($: EngineInterface) => `manual:${await $.session.id()}`
 const manualEffortOf = async ($: EngineInterface) => (await $.store.get(await manualKey($))) as string | undefined
+const isDisabled = async ($: EngineInterface) => (await $.store.get(DISABLED_KEY)) === true
+
+const repoOf = async ($: EngineInterface, root: string) => {
+  if (repo === undefined) {
+    const git = await $.process
+      .run(['git', '-C', root, 'rev-parse', '--path-format=absolute', '--git-common-dir'])
+      .catch(() => undefined)
+    const commonDir = git?.exitCode === 0 ? git.stdout.trim().replace(/\/\.git$/, '') : ''
+    repo = commonDir.split('/').filter(Boolean).at(-1) ?? ''
+  }
+  return repo || undefined
+}
 
 const appendLog = async ($: EngineInterface, entry: Record<string, unknown>) => {
-  const path = `${await $.env.get('HOME')}/.claude/effort-router/logs/${await $.session.id()}.jsonl`
+  const dir = await logDirOf($)
+  const path = `${dir}/${await $.session.id()}.jsonl`
   logQueue = logQueue
-    .then(async () => {
-      const previous = await $.fs.read(path).catch(() => '')
-      await $.fs.write(path, `${previous}${JSON.stringify(entry)}\n`)
-    })
+    .then(() => $.process.run(['sh', '-c', 'mkdir -p "$1" && cat >> "$2"', 'sh', dir, path], { stdin: `${JSON.stringify(entry)}\n` }))
     .catch(() => undefined)
   await logQueue
 }
@@ -79,7 +101,33 @@ const classify = async ($: EngineInterface, loop: LoopContext): Promise<Decision
   }
 }
 
+const stats = async ($: EngineInterface, period: string) => {
+  const script = `${$.plugin.root}/scripts/stats.py`
+  const run = await $.process
+    .run(['python3', script, period, '--session', await $.session.id()], { env: { EFFORT_ROUTER_LOG_DIR: await logDirOf($) } })
+    .catch((error: unknown) => ({ exitCode: 1, stdout: '', stderr: String(error) }))
+  return run.exitCode === 0 ? run.stdout.trim() : `Stats failed: ${'stderr' in run ? run.stderr : ''}`.trim()
+}
+
 export const register: Register = on => {
+  on('session.start', async ($, e, next) => {
+    await $.command.register({ name: COMMAND, description: 'Claude Effort Router: stats, stats:session|today|week|month|projects, disable, enable' })
+    return next(e)
+  })
+
+  on('command.run', { command: COMMAND }, async ($, e) => {
+    const arg = e.args.trim().toLowerCase()
+    if (arg === 'disable' || arg === 'enable') {
+      await $.store.set(DISABLED_KEY, arg === 'disable')
+      return { text: `Claude Effort Router ${arg === 'disable' ? 'disabled' : 'enabled'} in every session.` }
+    }
+    if (arg === 'stats') return { text: await stats($, 'all') }
+    const period = arg.startsWith('stats:') ? arg.slice('stats:'.length) : undefined
+    if (period && STATS_PERIODS.includes(period)) return { text: await stats($, period) }
+    const state = (await isDisabled($)) ? 'disabled' : (await manualEffortOf($)) ? 'paused in this session by /effort' : 'on'
+    return { text: `Claude Effort Router: ${state}.\n${USAGE}` }
+  })
+
   on('command.run', { command: 'effort' }, async ($, e, next) => {
     const result = await next(e)
     const level = e.args.trim().toLowerCase()
@@ -110,7 +158,7 @@ export const register: Register = on => {
 
   on('turn.step', async function* ($, e, next) {
     if (!ROUTED_MODEL.test(e.model) || typeof e.effort !== 'string') return yield* next(e)
-    if (isUltrathinkTurn || (await manualEffortOf($))) return yield* next(e)
+    if (isUltrathinkTurn || (await manualEffortOf($)) || (await isDisabled($))) return yield* next(e)
 
     const loop = loopOf(e.agentId)
     if (e.agentId && !loop.task) {
@@ -127,9 +175,11 @@ export const register: Register = on => {
 
     const calls = result.toolUses.map(use => `${use.name} ${stringify(use.input)}`).join('\n')
     loop.lastStep = clip(`${result.answer}\n${calls}`.trim())
+    const project = await $.session.root()
     await appendLog($, {
       at: new Date(startedAt).toISOString(),
-      project: await $.session.root(),
+      project,
+      repo: await repoOf($, project),
       agent: e.agentId ?? 'main',
       model: e.model,
       step: e.index,
