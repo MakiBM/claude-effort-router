@@ -1,0 +1,5 @@
+{
+  "name": "auto-effort",
+  "owner": { "name": "Bart Makoś" },
+  "plugins": [{ "name": "auto-effort", "source": "./", "description": "Per-step effort for Opus agents, chosen by Haiku 5.5" }]
+}
