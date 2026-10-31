@@ -27,11 +27,12 @@ const SYSTEM = [
 ].join('\n')
 
 const USAGE = [
-  `Usage: /${COMMAND} [stats | ${STATS_PERIODS.map(period => `stats:${period}`).join(' | ')} | start [${LEVELS.join('|')}] | disable | enable]`,
+  `Usage: /${COMMAND} [stats | ${STATS_PERIODS.map(period => `stats:${period}`).join(' | ')} | start [${LEVELS.join('|')}] | unpause | disable | enable]`,
   '- stats: all steps; session: this session; today, week, month: calendar periods; projects: steps per repository',
   `- start <level>: effort of the first step after each prompt, in every session (default ${DEFAULT_FIRST_STEP})`,
   '- disable / enable: turn the router off or on in every session',
-  '- /effort <level> pauses the router in this session only, until /effort auto',
+  '- a manual effort change (/effort <level>, or the effort picker in an app such as Zeron) pauses the router in this session only',
+  '- unpause (or /effort auto): route this session again',
 ].join('\n')
 
 const loops = new Map<string, LoopContext>()
@@ -65,8 +66,21 @@ const loopOf = (agentId?: string) => {
 
 const logDirOf = async ($: EngineInterface) => `${await $.env.get('HOME')}/.claude/effort-router/logs`
 const manualKey = async ($: EngineInterface) => `manual:${await $.session.id()}`
+const baselineKey = async ($: EngineInterface) => `baseline:${await $.session.id()}`
 const manualEffortOf = async ($: EngineInterface) => (await $.store.get(await manualKey($))) as string | undefined
 const isDisabled = async ($: EngineInterface) => (await $.store.get(DISABLED_KEY)) === true
+const unpause = async ($: EngineInterface) => {
+  await $.store.delete(await manualKey($))
+  await $.store.delete(await baselineKey($))
+}
+
+const noticeManualChange = async ($: EngineInterface, agent: string, effort: string) => {
+  const key = await baselineKey($)
+  const baselines = ((await $.store.get(key)) ?? {}) as Record<string, string>
+  if (baselines[agent] === undefined) await $.store.set(key, { ...baselines, [agent]: effort })
+  else if (baselines[agent] !== effort) await $.store.set(await manualKey($), effort)
+}
+
 const firstStepOf = async ($: EngineInterface) => toLevel(String((await $.store.get(FIRST_STEP_KEY)) ?? '')) ?? DEFAULT_FIRST_STEP
 
 const repoOf = async ($: EngineInterface, root: string) => {
@@ -114,7 +128,7 @@ const stats = async ($: EngineInterface, period: string) => {
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
-    await $.command.register({ name: COMMAND, description: 'Claude Effort Router: stats, stats:session|today|week|month|projects, start <level>, disable, enable' })
+    await $.command.register({ name: COMMAND, description: 'Claude Effort Router: stats, stats:session|today|week|month|projects, start <level>, unpause, disable, enable' })
     return next(e)
   })
 
@@ -131,17 +145,21 @@ export const register: Register = on => {
       await $.store.set(FIRST_STEP_KEY, level)
       return { text: `First step effort set to ${level} in every session.` }
     }
+    if (arg === 'unpause') {
+      await unpause($)
+      return { text: 'Claude Effort Router routes this session again.' }
+    }
     if (arg === 'stats') return { text: await stats($, 'all') }
     const period = arg.startsWith('stats:') ? arg.slice('stats:'.length) : undefined
     if (period && STATS_PERIODS.includes(period)) return { text: await stats($, period) }
-    const state = (await isDisabled($)) ? 'disabled' : (await manualEffortOf($)) ? 'paused in this session by /effort' : 'on'
+    const state = (await isDisabled($)) ? 'disabled' : (await manualEffortOf($)) ? 'paused in this session by a manual effort change' : 'on'
     return { text: `Claude Effort Router: ${state}, first step ${await firstStepOf($)}.\n${USAGE}` }
   })
 
   on('command.run', { command: 'effort' }, async ($, e, next) => {
     const result = await next(e)
     const level = e.args.trim().toLowerCase()
-    if (level === 'auto') await $.store.delete(await manualKey($))
+    if (level === 'auto') await unpause($)
     else if (level) await $.store.set(await manualKey($), level)
     return result
   })
@@ -168,7 +186,9 @@ export const register: Register = on => {
 
   on('turn.step', async function* ($, e, next) {
     if (!ROUTED_MODEL.test(e.model) || typeof e.effort !== 'string') return yield* next(e)
-    if (isUltrathinkTurn || (await manualEffortOf($)) || (await isDisabled($))) return yield* next(e)
+    if (isUltrathinkTurn || (await isDisabled($))) return yield* next(e)
+    await noticeManualChange($, e.agentId ?? 'main', String(e.effort))
+    if (await manualEffortOf($)) return yield* next(e)
 
     const loop = loopOf(e.agentId)
     if (e.agentId && !loop.task) {

@@ -82,11 +82,12 @@ def summary_tables(rows):
     timings = sorted(r["classifyMs"] for r in rows if r["reason"] == "haiku")
     cache_read = sum(r.get("cacheRead") or 0 for r in rows)
     cache_write = sum(r.get("cacheWrite") or 0 for r in rows)
+    first_levels = ", ".join(level for level in LEVELS if any(r["reason"] == "first step" and r["effort"] == level for r in rows)) or "high"
     summary = [
         ["Steps", len(rows)],
         ["Sessions", len({r["session"] for r in rows})],
         ["Decided by Haiku", reasons["haiku"]],
-        ["First step", reasons["first step"]],
+        [f"First step ({first_levels})", reasons["first step"]],
         ["Classifier failed (high)", reasons["classifier failed"]],
         ["Classify time p50", f"{timings[len(timings) // 2] / 1000:.1f} s" if timings else "-"],
         ["Classify time p90", f"{timings[int(len(timings) * 0.9)] / 1000:.1f} s" if timings else "-"],

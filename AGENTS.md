@@ -11,7 +11,8 @@ A Claude Code mod (plugin with a hooks module) that sets the effort of every Opu
   - `tool.call`: keeps the last tool results per agent for the classifier.
   - `prompt.submit`, `turn.complete`: the task text and the `ultrathink` turn.
   - `command.run` on `effort`: a manual `/effort` pauses routing for the session; `/effort auto` resumes it.
-  - `command.run` on `effort-router`: the `/effort-router` command (stats, start, disable, enable). Stats run `scripts/stats.py`; `start` and `disable` set keys in `$.store` that every session reads.
+  - Apps such as Zeron change effort without the `/effort` command. `turn.step` keeps the first session effort of each agent (`baseline:<session>` in `$.store`); a later different value pauses the session like `/effort`. `unpause` clears both keys.
+  - `command.run` on `effort-router`: the `/effort-router` command (stats, start, unpause, disable, enable). Stats run `scripts/stats.py`; `start` and `disable` set keys in `$.store` that every session reads.
 - `scripts/stats.py`, `scripts/stats_test.py`: the stats tables (Python 3, standard library only).
 
 ## Rules

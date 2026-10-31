@@ -36,6 +36,7 @@ def test_all_counts_every_step():
         out = run(tmp, "all").stdout
         assert "| Steps                    |     4 |" in out
         assert "| low    |     2 |   50% |" in out
+        assert "| First step (high)        |     1 |" in out
 
 
 def test_today_skips_old_steps_and_session_keeps_one_session():

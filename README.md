@@ -16,7 +16,7 @@ A Claude Code turn is a loop of steps. Each step is one request to the model, wh
 
 - Only steps on an Opus model are routed. A session or subagent you put on Haiku or Sonnet is left alone.
 - Every agent decides for itself: each session and each subagent has its own context.
-- Your choice wins. `/effort <level>` pauses the router in that session until `/effort auto`. A prompt that contains `ultrathink` pauses it for that turn.
+- Your choice wins. A manual effort change pauses the router in that session: `/effort <level>`, or the effort picker of an app that runs Claude Code (for example Zeron). `/effort-router unpause` or `/effort auto` routes the session again. A prompt that contains `ultrathink` pauses it for that turn.
 
 Opus 5.5 also adapts its thinking inside each step; the router sets the ceiling the step works under.
 
@@ -62,9 +62,10 @@ The router loads when a session starts. Restart running sessions to pick it up.
 /effort-router stats:projects   steps per repository
 /effort-router start            show the first-step effort
 /effort-router start <level>    set the first-step effort in every session (default high)
+/effort-router unpause          route this session again after a manual effort change
 /effort-router disable          turn the router off in every session
 /effort-router enable           turn it back on in every session
-/effort <level>                 pause the router in this session only, until /effort auto
+/effort <level>                 pause the router in this session only (so does an app effort picker)
 ```
 
 Stats print as markdown tables: a summary and the share of each effort level, or for `stats:projects` the steps per repository. Worktrees (git worktrees, Multica and Orca workspaces) count under their main repository.
