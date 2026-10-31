@@ -10,7 +10,7 @@ A Claude Code turn is a loop of steps. Each step is one request to the model, wh
 
 | Step | Effort |
 | --- | --- |
-| First step after your prompt | `high` |
+| First step after your prompt | `high` (change it with `/effort-router start <level>`) |
 | Every later step | Haiku 5.5 reads the task, the previous step and its tool results, and picks `low`, `medium`, `high` or `xhigh` |
 | Classifier fails or times out (8 s) | `high` |
 
@@ -60,6 +60,8 @@ The router loads when a session starts. Restart running sessions to pick it up.
 /effort-router stats:week       this calendar week, from Monday
 /effort-router stats:month      this calendar month
 /effort-router stats:projects   steps per repository
+/effort-router start            show the first-step effort
+/effort-router start <level>    set the first-step effort in every session (default high)
 /effort-router disable          turn the router off in every session
 /effort-router enable           turn it back on in every session
 /effort <level>                 pause the router in this session only, until /effort auto
@@ -82,7 +84,7 @@ claude plugin uninstall effort-router@effort-router
 
 ## Change it
 
-The levels, the first-step effort, the classifier model and its prompt are constants at the top of `hooks/register.ts`. See `AGENTS.md` for how to work on the code.
+The levels, the default first-step effort, the classifier model and its prompt are constants at the top of `hooks/register.ts`. See `AGENTS.md` for how to work on the code.
 
 ## License
 

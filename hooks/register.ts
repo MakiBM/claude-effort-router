@@ -5,7 +5,7 @@ type LoopContext = { task: string; lastStep: string; toolResults: string[] }
 type Decision = { level: Level; reason: string; classifierInput?: string; classifierReply?: string }
 
 const LEVELS: readonly Level[] = ['low', 'medium', 'high', 'xhigh']
-const FIRST_STEP: Level = 'high'
+const DEFAULT_FIRST_STEP: Level = 'high'
 const FALLBACK: Level = 'high'
 const ROUTED_MODEL = /opus/i
 const CLASSIFIER = 'claude-haiku-5-5'
@@ -14,6 +14,7 @@ const CONTEXT_CHARS = 1500
 const COMMAND = 'effort-router'
 const STATS_PERIODS = ['session', 'today', 'week', 'month', 'projects']
 const DISABLED_KEY = 'disabled'
+const FIRST_STEP_KEY = 'firstStep'
 
 const SYSTEM = [
   'You set the reasoning effort for the NEXT step of a coding agent.',
@@ -26,8 +27,9 @@ const SYSTEM = [
 ].join('\n')
 
 const USAGE = [
-  `Usage: /${COMMAND} [stats | ${STATS_PERIODS.map(period => `stats:${period}`).join(' | ')} | disable | enable]`,
+  `Usage: /${COMMAND} [stats | ${STATS_PERIODS.map(period => `stats:${period}`).join(' | ')} | start [${LEVELS.join('|')}] | disable | enable]`,
   '- stats: all steps; session: this session; today, week, month: calendar periods; projects: steps per repository',
+  `- start <level>: effort of the first step after each prompt, in every session (default ${DEFAULT_FIRST_STEP})`,
   '- disable / enable: turn the router off or on in every session',
   '- /effort <level> pauses the router in this session only, until /effort auto',
 ].join('\n')
@@ -65,6 +67,7 @@ const logDirOf = async ($: EngineInterface) => `${await $.env.get('HOME')}/.clau
 const manualKey = async ($: EngineInterface) => `manual:${await $.session.id()}`
 const manualEffortOf = async ($: EngineInterface) => (await $.store.get(await manualKey($))) as string | undefined
 const isDisabled = async ($: EngineInterface) => (await $.store.get(DISABLED_KEY)) === true
+const firstStepOf = async ($: EngineInterface) => toLevel(String((await $.store.get(FIRST_STEP_KEY)) ?? '')) ?? DEFAULT_FIRST_STEP
 
 const repoOf = async ($: EngineInterface, root: string) => {
   if (repo === undefined) {
@@ -111,7 +114,7 @@ const stats = async ($: EngineInterface, period: string) => {
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
-    await $.command.register({ name: COMMAND, description: 'Claude Effort Router: stats, stats:session|today|week|month|projects, disable, enable' })
+    await $.command.register({ name: COMMAND, description: 'Claude Effort Router: stats, stats:session|today|week|month|projects, start <level>, disable, enable' })
     return next(e)
   })
 
@@ -121,11 +124,18 @@ export const register: Register = on => {
       await $.store.set(DISABLED_KEY, arg === 'disable')
       return { text: `Claude Effort Router ${arg === 'disable' ? 'disabled' : 'enabled'} in every session.` }
     }
+    if (arg === 'start') return { text: `First step effort: ${await firstStepOf($)}.` }
+    if (arg.startsWith('start ')) {
+      const level = toLevel(arg.slice('start '.length))
+      if (!level) return { text: `Unknown level. Use one of: ${LEVELS.join(', ')}.` }
+      await $.store.set(FIRST_STEP_KEY, level)
+      return { text: `First step effort set to ${level} in every session.` }
+    }
     if (arg === 'stats') return { text: await stats($, 'all') }
     const period = arg.startsWith('stats:') ? arg.slice('stats:'.length) : undefined
     if (period && STATS_PERIODS.includes(period)) return { text: await stats($, period) }
     const state = (await isDisabled($)) ? 'disabled' : (await manualEffortOf($)) ? 'paused in this session by /effort' : 'on'
-    return { text: `Claude Effort Router: ${state}.\n${USAGE}` }
+    return { text: `Claude Effort Router: ${state}, first step ${await firstStepOf($)}.\n${USAGE}` }
   })
 
   on('command.run', { command: 'effort' }, async ($, e, next) => {
@@ -167,7 +177,7 @@ export const register: Register = on => {
     }
 
     const startedAt = await $.clock.now()
-    const decision: Decision = e.index === 0 ? { level: FIRST_STEP, reason: 'first step' } : await classify($, loop)
+    const decision: Decision = e.index === 0 ? { level: await firstStepOf($), reason: 'first step' } : await classify($, loop)
     const classifyMs = (await $.clock.now()) - startedAt
     loop.toolResults = []
 

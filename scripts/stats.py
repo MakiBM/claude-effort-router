@@ -86,7 +86,7 @@ def summary_tables(rows):
         ["Steps", len(rows)],
         ["Sessions", len({r["session"] for r in rows})],
         ["Decided by Haiku", reasons["haiku"]],
-        ["First step (high)", reasons["first step"]],
+        ["First step", reasons["first step"]],
         ["Classifier failed (high)", reasons["classifier failed"]],
         ["Classify time p50", f"{timings[len(timings) // 2] / 1000:.1f} s" if timings else "-"],
         ["Classify time p90", f"{timings[int(len(timings) * 0.9)] / 1000:.1f} s" if timings else "-"],

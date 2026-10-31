@@ -7,11 +7,11 @@ A Claude Code mod (plugin with a hooks module) that sets the effort of every Opu
 - `.claude-plugin/plugin.json`: manifest. The plugin id is `effort-router`: names that start with `claude-` are reserved for Anthropic.
 - `.claude-plugin/marketplace.json`: makes this repository its own marketplace (`source: "./"`).
 - `hooks/hooks.json`, `hooks/register.ts`: the hooks module. Hooks:
-  - `turn.step`: before each request to the model; sets `effort` on Opus steps (first step `FIRST_STEP`, later steps from the classifier).
+  - `turn.step`: before each request to the model; sets `effort` on Opus steps (first step from `$.store` key `firstStep`, default `DEFAULT_FIRST_STEP`; later steps from the classifier).
   - `tool.call`: keeps the last tool results per agent for the classifier.
   - `prompt.submit`, `turn.complete`: the task text and the `ultrathink` turn.
   - `command.run` on `effort`: a manual `/effort` pauses routing for the session; `/effort auto` resumes it.
-  - `command.run` on `effort-router`: the `/effort-router` command (stats, disable, enable). Stats run `scripts/stats.py`; `disable` sets a flag in `$.store` that every session reads.
+  - `command.run` on `effort-router`: the `/effort-router` command (stats, start, disable, enable). Stats run `scripts/stats.py`; `start` and `disable` set keys in `$.store` that every session reads.
 - `scripts/stats.py`, `scripts/stats_test.py`: the stats tables (Python 3, standard library only).
 
 ## Rules
